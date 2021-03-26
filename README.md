@@ -13,7 +13,7 @@ Here we tried to detect and genarate a mask for all the cars in an image.
 
 ![Example 0](many_objects_results.png)
 
-![Example 1](cars_with_pedestrian_results.png)
+![Example 1](cars_with_pededtrian_1.png)
 
 ![Example 2](car_result.png)
 
