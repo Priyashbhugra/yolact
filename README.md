@@ -1,7 +1,8 @@
 # yolact
 
- This is the code for our papers: - [YOLACT: Real-time Instance Segmentation](https://arxiv.org/abs/1904.02689)
-
+ This is the code from the papers: - [YOLACT: Real-time Instance Segmentation](https://arxiv.org/abs/1904.02689)
+ 
+ I have used code from https://github.com/dbolya/yolact.git
 
 
 
