@@ -9,6 +9,8 @@
 This repo will help you detect and segment the instances of the cars: 
 Below you can see the results from this YOLACT model.
 
+Here we tried to detect and genarate a mask for all the cars in an image.
+
 ![Example 0](many_objects_results.png)
 
 ![Example 1](cars_with_pedestrian_results.png)
