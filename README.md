@@ -9,11 +9,11 @@
 This repo will help you detect and segment the instances of the cars: 
 Below you can see the results from this YOLACT model.
 
-![Example 0](data/yolact_example_0.png)
+![Example 0](many_objects_results.png)
 
-![Example 1](data/yolact_example_1.png)
+![Example 1](cars_with_pedestrian_results.png)
 
-![Example 2](data/yolact_example_2.png)
+![Example 2](car_result.png)
 
 # Installation
  - Clone this repository and enter it:
