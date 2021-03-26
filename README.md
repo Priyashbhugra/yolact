@@ -25,7 +25,8 @@ Here we tried to detect and genarate a mask for all the cars in an image.
    ```
  - Create Anaconda environment:
    ```Shell
-   conda create -n yolact 
+   conda create -n yolact
+   conda activate yolact
   
       ```
 
