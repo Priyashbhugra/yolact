@@ -37,7 +37,7 @@ Here we tried to detect and genarate a mask for all the cars in an image.
 
 
 # Evaluation
-Here are our YOLACT models pretrained on COCO dataset:
+Here are our YOLACT model pretrained on COCO dataset:
 
 - Download Resnet101-FPN ----------[yolact_im700_54_800000.pth](https://drive.google.com/file/d/1lE4Lz5p25teiXV-6HdTiOJSnS7u7GBzg/view?usp=sharing)
 
