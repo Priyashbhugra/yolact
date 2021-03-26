@@ -12,7 +12,7 @@ Below you can see the results from this YOLACT model.
 Here we tried to detect and genarate a mask for all the cars in an image.
 
 As asked in the task:
-
+Only the highest score car is detected and a mask is genrated over the car:
 ![Example 1](cars_with_pededtrian_1.png)
 
 ![Example 2](car_result.png)
