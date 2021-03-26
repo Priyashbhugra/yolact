@@ -47,5 +47,5 @@ To evalute the model, put the corresponding weights file in the `weights` direct
 ## Results on pretrained COCO dataset
 - Run the below command for evaluation
 ```Shell
-python eval.py --trained_model=weights/yolact_im700_54_800000.pth --score_threshold=0.15 --image=car.jpeg --cross_class_nms=True
+python eval.py --trained_model=weights/yolact_im700_54_800000.pth --score_threshold=0.15 --image=car.jpeg --cross_class_nms=True --top_k=1 
 ```
