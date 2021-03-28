@@ -82,15 +82,17 @@ class Detect(object):
         """ Perform nms for only the max scoring class that isn't background (class 0) """
         cur_scores = conf_preds[batch_idx, 1:, :]
 
-        
         # only for car class  
         for i in range(cur_scores.shape[0]):
             if i != 2:
                 cur_scores[i] *= 0
         
         conf_scores, _ = torch.max(cur_scores, dim=0)
+        
+     
 
         keep = (conf_scores > self.conf_thresh)
+     
         scores = cur_scores[:, keep]
         boxes = decoded_boxes[keep, :]
         masks = mask_data[batch_idx, keep, :]

@@ -113,6 +113,13 @@ def parse_args(argv=None):
                         help='When displaying / saving video, draw the FPS on the frame')
     parser.add_argument('--emulate_playback', default=False, dest='emulate_playback', action='store_true',
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
+    parser.add_argument('--display_best_bboxes_only', default=False,
+                        help='Displays only bounding boxes')
+    parser.add_argument('--display_best_masks_only', default=False,
+                        help='Displays only bounding boxes')
+    parser.add_argument('--display_object_without_mask', default=False,
+                        help='Displays only bounding boxes')
+
 
     parser.set_defaults(no_bar=False, display=False, resume=False, output_coco_json=False, output_web_json=False, shuffle=False,
                         benchmark=False, no_sort=False, no_hash=False, mask_proto_debug=False, crop=True, detect=False, display_fps=False,
@@ -207,6 +214,21 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
             masks_color_summand += masks_color_cumul.sum(dim=0)
 
         img_gpu = img_gpu * inv_alph_masks.prod(dim=0) + masks_color_summand
+
+    if args.display_best_masks_only:
+        masks = masks[:num_dets_to_consider, :, :, None]
+        num_dets_to_consider = min(args.top_k, classes.shape[0])
+        print('maskshape', (masks.shape))
+        for i in range(num_dets_to_consider):
+            msk = masks[i, :, :, None]
+            mask = msk.view(1, masks.shape[1], masks.shape[2], 1)
+            print('newmaskshape', (mask.shape))
+            img_gpu_masked = img_gpu * (mask.sum(dim=0) >= 1).float().expand(-1, -1, 3)
+            img_numpy_masked = (img_gpu_masked * 255).byte().cpu().numpy()
+            cv2.imwrite('results/mask_image'+str(i)+'.jpg', img_numpy_masked)
+            print("Mask for the most visible car is generated")
+            
+  
     
     if args.display_fps:
             # Draw the box for the fps on the GPU
@@ -241,6 +263,11 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
 
             if args.display_bboxes:
                 cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
+
+            if args.display_best_bboxes_only:
+                crop = img_numpy[y1:y2,x1:x2]
+                cv2.imwrite('results/crop_object.png',crop)
+                print("crop for the most visible car is generated")
 
             if args.display_text:
                 _class = cfg.dataset.class_names[classes[j]]
@@ -369,8 +396,6 @@ class Detections:
 
         with open(os.path.join(args.web_det_path, '%s.json' % cfg.name), 'w') as f:
             json.dump(output, f)
-        
-
         
 
 def _mask_iou(mask1, mask2, iscrowd=False):
@@ -605,6 +630,7 @@ def evalimage(net:Yolact, path:str, save_path:str=None):
     if save_path is None:
         plt.imshow(img_numpy)
         plt.title(path)
+        plt.savefig('results/results.png')
         plt.show()
     else:
         cv2.imwrite(save_path, img_numpy)
