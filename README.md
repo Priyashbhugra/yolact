@@ -31,7 +31,7 @@ This repo will help you detect and segment the instances of the cars:
    ```
  - Run the below command and wait untill the envionment is created:
    ```Shell
-   conda env create -f environment.yml`
+   conda env create -f environment.yml
    ```
 
 
@@ -57,7 +57,7 @@ python eval.py --trained_model=weights/yolact_im700_54_800000.pth --score_thresh
 Here we tried to detect and genarate a mask for all the cars in an image. Below you can see the results from this YOLACT model. This repo supports FPN.
 
 - As asked in the task Example 1:
-- Only the highest score car is detected and a mask is genrated over the car:
+- Only the highest score car is detected and a mask is generated over the car:
 ![Example 1](cars_with_pedestrian.jpg ) 
 
 - Masked Image of the car with highest confidence score 
@@ -67,7 +67,6 @@ Here we tried to detect and genarate a mask for all the cars in an image. Below 
  
 ![Example 4](results/crop_object_0.png)
 
-<!-- ![Example 2](car_result.png) -->
 
 Another example for car as asked in the task 
 
