@@ -81,7 +81,7 @@ Another example for car as asked in the task
 
 If you want to detect and segment all the cars in an image use the below code.
 ```Shell
-python eval.py --trained_model=weights/yolact_im700_54_800000.pth --score_threshold=0.15 --image=car.jpeg --cross_class_nms=True --display_bboxes=True  
+python eval.py --trained_model=weights/yolact_im700_54_800000.pth --score_threshold=0.15 --image=car.jpeg --cross_class_nms=True 
 ```
 ![Example 0](results/result.png)
 
