@@ -630,8 +630,10 @@ def evalimage(net:Yolact, path:str, save_path:str=None):
     if save_path is None:
         plt.imshow(img_numpy)
         plt.title(path)
-        plt.savefig('results/results.png')
+        # plt.savefig('results/results.png')
         plt.show()
+        RGB_img = cv2.cvtColor(img_numpy, cv2.COLOR_BGR2RGB)
+        cv2.imwrite("results/results.png", RGB_img)
     else:
         cv2.imwrite(save_path, img_numpy)
 
