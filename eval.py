@@ -113,12 +113,11 @@ def parse_args(argv=None):
                         help='When displaying / saving video, draw the FPS on the frame')
     parser.add_argument('--emulate_playback', default=False, dest='emulate_playback', action='store_true',
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
-    parser.add_argument('--display_best_bboxes_only', default=False,
-                        help='Displays only bounding boxes')
-    parser.add_argument('--display_best_masks_only', default=False,
-                        help='Displays only bounding boxes')
-    parser.add_argument('--display_object_without_mask', default=False,
-                        help='Displays only bounding boxes')
+                        
+    parser.add_argument('--display_best_bboxes_only', default=False)
+    parser.add_argument('--display_best_masks_only', default=False)
+    parser.add_argument('--display_object_without_mask', default=False)
+    parser.add_argument('--display_only_car', default=False)
 
 
     parser.set_defaults(no_bar=False, display=False, resume=False, output_coco_json=False, output_web_json=False, shuffle=False,
@@ -228,8 +227,6 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
             cv2.imwrite('results/mask_image'+str(i)+'.jpg', img_numpy_masked)
             print("Mask for the most visible car is generated")
             
-  
-    
     if args.display_fps:
             # Draw the box for the fps on the GPU
         font_face = cv2.FONT_HERSHEY_DUPLEX
@@ -617,10 +614,10 @@ def badhash(x):
     x =  ((x >> 16) ^ x) & 0xFFFFFFFF
     return x
 
-def evalimage(net:Yolact, path:str, save_path:str=None):
+def evalimage(net:Yolact, path:str, args,  save_path:str=None):
     frame = torch.from_numpy(cv2.imread(path)).cuda().float()
     batch = FastBaseTransform()(frame.unsqueeze(0))
-    preds = net(batch)
+    preds = net(batch,args)
 
     img_numpy = prep_display(preds, frame, None, None, undo_transform=False)
     
@@ -895,7 +892,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     
     cleanup_and_exit()
 
-def evaluate(net:Yolact, dataset, train_mode=False):
+def evaluate(net:Yolact, dataset, args ,train_mode=False):
     net.detect.use_fast_nms = args.fast_nms
     net.detect.use_cross_class_nms = args.cross_class_nms
     cfg.mask_proto_debug = args.mask_proto_debug
@@ -906,7 +903,7 @@ def evaluate(net:Yolact, dataset, train_mode=False):
             inp, out = args.image.split(':')
             evalimage(net, inp, out)
         else:
-            evalimage(net, args.image)
+            evalimage(net, args.image, args)
         return
     elif args.images is not None:
         inp, out = args.images.split(':')
@@ -924,7 +921,7 @@ def evaluate(net:Yolact, dataset, train_mode=False):
     dataset_size = len(dataset) if args.max_images < 0 else min(args.max_images, len(dataset))
     progress_bar = ProgressBar(30, dataset_size)
 
-    print()
+    
 
     if not args.display and not args.benchmark:
         # For each class and iou, stores tuples (score, isPositive)
@@ -1122,7 +1119,7 @@ if __name__ == '__main__':
             dataset = None        
 
         print('Loading model...', end='')
-        net = Yolact()
+        net = Yolact(args)
         net.load_weights(args.trained_model)
         net.eval()
         print(' Done.')
@@ -1130,6 +1127,6 @@ if __name__ == '__main__':
         if args.cuda:
             net = net.cuda()
 
-        evaluate(net, dataset)
+        evaluate(net, dataset, args)
 
 

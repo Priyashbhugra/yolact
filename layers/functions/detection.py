@@ -16,7 +16,7 @@ class Detect(object):
     """
     # TODO: Refactor this whole class away. It needs to go.
 
-    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh, display_only_car):
         self.num_classes = num_classes
         self.background_label = bkg_label
         self.top_k = top_k
@@ -28,8 +28,10 @@ class Detect(object):
         
         self.use_cross_class_nms = False
         self.use_fast_nms = False
+        self.display_only_car = display_only_car
+        
 
-    def __call__(self, predictions, net):
+    def __call__(self, predictions, net, args):
         """
         Args:
              loc_data: (tensor) Loc preds from loc layers
@@ -68,7 +70,7 @@ class Detect(object):
 
             for batch_idx in range(batch_size):
                 decoded_boxes = decode(loc_data[batch_idx], prior_data)
-                result = self.detect(batch_idx, conf_preds, decoded_boxes, mask_data, inst_data)
+                result = self.detect(batch_idx, conf_preds, decoded_boxes, mask_data, inst_data, self.display_only_car)
 
                 if result is not None and proto_data is not None:
                     result['proto'] = proto_data[batch_idx]
@@ -78,19 +80,18 @@ class Detect(object):
         return out
 
 
-    def detect(self, batch_idx, conf_preds, decoded_boxes, mask_data, inst_data):
+    def detect(self, batch_idx, conf_preds, decoded_boxes, mask_data, inst_data, display_only_car):
         """ Perform nms for only the max scoring class that isn't background (class 0) """
         cur_scores = conf_preds[batch_idx, 1:, :]
 
         # only for car class  
-        for i in range(cur_scores.shape[0]):
-            if i != 2:
-                cur_scores[i] *= 0
+        if display_only_car == True:
+            for i in range(cur_scores.shape[0]):
+                if i != 2:
+                    cur_scores[i] *= 0
         
         conf_scores, _ = torch.max(cur_scores, dim=0)
         
-     
-
         keep = (conf_scores > self.conf_thresh)
      
         scores = cur_scores[:, keep]

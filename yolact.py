@@ -8,6 +8,8 @@ from math import sqrt
 from typing import List
 from collections import defaultdict
 
+from typing_extensions import get_args
+
 from data.config import cfg, mask_type
 from layers import Detect
 from layers.interpolate import InterpolateModule
@@ -396,14 +398,16 @@ class Yolact(nn.Module):
         - pred_aspect_ratios: A list of lists of aspect ratios with len(selected_layers) (see PredictionModule)
     """
 
-    def __init__(self):
+    def __init__(self,args):
         super().__init__()
 
         self.backbone = construct_backbone(cfg.backbone)
+        
 
         if cfg.freeze_bn:
             self.freeze_bn()
-
+        
+        cfg.display_only_car = args.display_only_car
         # Compute mask_dim here and add it back to the config. Make sure Yolact's constructor is called early!
         if cfg.mask_type == mask_type.direct:
             cfg.mask_dim = cfg.mask_size**2
@@ -468,7 +472,7 @@ class Yolact(nn.Module):
 
         # For use in evaluation
         self.detect = Detect(cfg.num_classes, bkg_label=0, top_k=cfg.nms_top_k,
-            conf_thresh=cfg.nms_conf_thresh, nms_thresh=cfg.nms_thresh)
+            conf_thresh=cfg.nms_conf_thresh, nms_thresh=cfg.nms_thresh, display_only_car = cfg.display_only_car)
 
     def save_weights(self, path):
         """ Saves the model's weights using compression because the file sizes were getting too big. """
@@ -561,11 +565,12 @@ class Yolact(nn.Module):
                 module.weight.requires_grad = enable
                 module.bias.requires_grad = enable
     
-    def forward(self, x):
+    def forward(self, x, args):
         """ The input should be of size [batch_size, 3, img_h, img_w] """
         _, _, img_h, img_w = x.size()
         cfg._tmp_img_h = img_h
         cfg._tmp_img_w = img_w
+        self.display_only_car = args.display_only_car
         
         with timer.env('backbone'):
             outs = self.backbone(x)
@@ -673,7 +678,7 @@ class Yolact(nn.Module):
                 else:
                     pred_outs['conf'] = F.softmax(pred_outs['conf'], -1)
 
-            return self.detect(pred_outs, self)
+            return self.detect(pred_outs, self, args)
 
 
 
