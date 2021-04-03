@@ -55,7 +55,7 @@ python eval.py --trained_model=weights/yolact_im700_54_800000.pth --score_thresh
 
 
 Here we tried to detect and genarate a mask for all the cars in an image. Below you can see the results from this YOLACT model. This repo supports FPN.
-
+Example 1:
 - As asked in the task Example 1:
 - Only the highest score car is detected and a mask is generated over the car:
 ![Example 1](cars_with_pedestrian.jpg ) 
@@ -68,7 +68,7 @@ Here we tried to detect and genarate a mask for all the cars in an image. Below 
 ![Example 4](results/crop_object_0.png)
 
 
-Another example for car as asked in the task 
+Example 2: 
 
 ![Example 1](car.jpeg)
 
@@ -83,6 +83,6 @@ If you want to detect and segment all the cars in an image use the below code.
 ```Shell
 python eval.py --trained_model=weights/yolact_im700_54_800000.pth --score_threshold=0.15 --image=car.jpeg --cross_class_nms=True 
 ```
-![Example 0](results/result.png)
+![Example 0](results/results.png)
 
 
