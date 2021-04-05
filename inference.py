@@ -1,3 +1,18 @@
+from fastapi import FastAPI
+import uvicorn
+from pydantic import BaseModel
+import eval
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import HTMLResponse
+import torch
+from yolact import Yolact
+from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, Request, Form
+from argparse import Namespace
+from inf_eval import evaluate
+from data import config
+import torch.backends.cudnn as cudnn
+import argparse
 from data import COCODetection, get_label_map, MEANS, COLORS
 from yolact import Yolact
 from utils.augmentations import BaseTransform, FastBaseTransform, Resize
@@ -7,28 +22,20 @@ from utils import timer
 from utils.functions import SavePath
 from layers.output_utils import postprocess, undo_image_transformation
 import pycocotools
-
 from data import cfg, set_cfg, set_dataset
-
-import numpy as np
-import torch
-import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
-import argparse
-import time
-import random
-import cProfile
-import pickle
-import json
 import os
-from collections import defaultdict
-from pathlib import Path
-from collections import OrderedDict
-from PIL import Image
 
-import matplotlib.pyplot as plt
-import cv2
 
+# Declaring our FastAPI instance
+app = FastAPI()
+
+# args = Namespace(display_scores=True,display_best_bboxes_only=False,display_bboxes=True,
+#                  display_text=True,display_fps=False,display_best_masks_only=True,
+#                  display_masks=True,crop=True, display_lincomb = False, cuda =True,
+#                  mask_proto_debug=False ,fast_nms= True, cross_class_nms = True,
+#                  trained_model = "weights/yolact_im700_54_800000.pth",
+#                  score_threshold = 0.15, top_k = 100, display_only_car = False,
+#                  image = "cars_with_pedestrian.jpg")
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -134,313 +141,6 @@ def parse_args(argv=None):
     if args.seed is not None:
         random.seed(args.seed)
 
-color_cache = defaultdict(lambda: {})
-
-def prep_display(dets_out, img, h, w, args, undo_transform=True, class_color=False, mask_alpha=0.45, fps_str=''):
-    """
-    Note: If undo_transform=False then im_h and im_w are allowed to be None.
-    """
-    if undo_transform:
-        img_numpy = undo_image_transformation(img, w, h)
-        img_gpu = torch.Tensor(img_numpy).cuda()
-    else:
-        img_gpu = img / 255.0
-        h, w, _ = img.shape
-    
-    with timer.env('Postprocess'):
-        save = cfg.rescore_bbox
-        cfg.rescore_bbox = True
-        t = postprocess(dets_out, w, h, visualize_lincomb = args.display_lincomb,
-                                        crop_masks        = args.crop,
-                                        score_threshold   = args.score_threshold)
-        cfg.rescore_bbox = save
-
-    with timer.env('Copy'):
-        idx = t[1].argsort(0, descending=True)[:args.top_k]
-        
-        if cfg.eval_mask_branch:
-            # Masks are drawn on the GPU, so don't copy
-            masks = t[3][idx]
-        classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
-
-    num_dets_to_consider = min(args.top_k, classes.shape[0])
-    for j in range(num_dets_to_consider):
-        if scores[j] < args.score_threshold:
-            num_dets_to_consider = j
-            break
-
-    # Quick and dirty lambda for selecting the color for a particular index
-    # Also keeps track of a per-gpu color cache for maximum speed
-    def get_color(j, on_gpu=None):
-        global color_cache
-        color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
-        
-        if on_gpu is not None and color_idx in color_cache[on_gpu]:
-            return color_cache[on_gpu][color_idx]
-        else:
-            color = COLORS[color_idx]
-            if not undo_transform:
-                # The image might come in as RGB or BRG, depending
-                color = (color[2], color[1], color[0])
-            if on_gpu is not None:
-                color = torch.Tensor(color).to(on_gpu).float() / 255.
-                color_cache[on_gpu][color_idx] = color
-            return color
-
-    # First, draw the masks on the GPU where we can do it really fast
-    # Beware: very fast but possibly unintelligible mask-drawing code ahead
-    # I wish I had access to OpenGL or Vulkan but alas, I guess Pytorch tensor operations will have to suffice
-    if args.display_masks and cfg.eval_mask_branch and num_dets_to_consider > 0:
-        # After this, mask is of size [num_dets, h, w, 1]
-        masks = masks[:num_dets_to_consider, :, :, None]
-        
-        # Prepare the RGB images for each mask given their color (size [num_dets, h, w, 1])
-        colors = torch.cat([get_color(j, on_gpu=img_gpu.device.index).view(1, 1, 1, 3) for j in range(num_dets_to_consider)], dim=0)
-        masks_color = masks.repeat(1, 1, 1, 3) * colors * mask_alpha
-
-        # This is 1 everywhere except for 1-mask_alpha where the mask is
-        inv_alph_masks = masks * (-mask_alpha) + 1
-        
-        # I did the math for this on pen and paper. This whole block should be equivalent to:
-        #    for j in range(num_dets_to_consider):
-        #        img_gpu = img_gpu * inv_alph_masks[j] + masks_color[j]
-        masks_color_summand = masks_color[0]
-        if num_dets_to_consider > 1:
-            inv_alph_cumul = inv_alph_masks[:(num_dets_to_consider-1)].cumprod(dim=0)
-            masks_color_cumul = masks_color[1:] * inv_alph_cumul
-            masks_color_summand += masks_color_cumul.sum(dim=0)
-
-        img_gpu = img_gpu * inv_alph_masks.prod(dim=0) + masks_color_summand
-
-    if args.display_best_masks_only:
-        masks = masks[:num_dets_to_consider, :, :, None]
-        num_dets_to_consider = min(args.top_k, classes.shape[0])
-        print('maskshape', (masks.shape))
-        for i in range(num_dets_to_consider):
-            msk = masks[i, :, :, None]
-            mask = msk.view(1, masks.shape[1], masks.shape[2], 1)
-            print('newmaskshape', (mask.shape))
-            img_gpu_masked = img_gpu * (mask.sum(dim=0) >= 1).float().expand(-1, -1, 3)
-            img_numpy_masked = (img_gpu_masked * 255).byte().cpu().numpy()
-            cv2.imwrite('results/mask_image'+str(i)+'.jpg', img_numpy_masked)
-            print("Mask for the most visible car is generated")
-            
-  
-    
-    if args.display_fps:
-            # Draw the box for the fps on the GPU
-        font_face = cv2.FONT_HERSHEY_DUPLEX
-        font_scale = 0.6
-        font_thickness = 1
-
-        text_w, text_h = cv2.getTextSize(fps_str, font_face, font_scale, font_thickness)[0]
-
-        img_gpu[0:text_h+8, 0:text_w+8] *= 0.6 # 1 - Box alpha
-
-
-    # Then draw the stuff that needs to be done on the cpu
-    # Note, make sure this is a uint8 tensor or opencv will not anti alias text for whatever reason
-    img_numpy = (img_gpu * 255).byte().cpu().numpy()
-
-    if args.display_fps:
-        # Draw the text on the CPU
-        text_pt = (4, text_h + 2)
-        text_color = [255, 255, 255]
-
-        cv2.putText(img_numpy, fps_str, text_pt, font_face, font_scale, text_color, font_thickness, cv2.LINE_AA)
-    
-    if num_dets_to_consider == 0:
-        return img_numpy
-
-    if args.display_text or args.display_bboxes:
-        for j in reversed(range(num_dets_to_consider)):
-            x1, y1, x2, y2 = boxes[j, :]
-            color = get_color(j)
-            score = scores[j]
-
-            if args.display_bboxes:
-                cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
-
-            if args.display_best_bboxes_only:
-                crop = img_numpy[y1:y2,x1:x2]
-                cv2.imwrite('results/crop_object.png',crop)
-                print("crop for the most visible car is generated")
-
-            if args.display_text:
-                _class = cfg.dataset.class_names[classes[j]]
-                text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
-
-                font_face = cv2.FONT_HERSHEY_DUPLEX
-                font_scale = 0.6
-                font_thickness = 1
-
-                text_w, text_h = cv2.getTextSize(text_str, font_face, font_scale, font_thickness)[0]
-
-                text_pt = (x1, y1 - 3)
-                text_color = [255, 255, 255]
-
-                cv2.rectangle(img_numpy, (x1, y1), (x1 + text_w, y1 - text_h - 4), color, -1)
-                cv2.putText(img_numpy, text_str, text_pt, font_face, font_scale, text_color, font_thickness, cv2.LINE_AA)
-            
-    
-    return img_numpy
-
-def evalimage(net:Yolact, path:str, args,  save_path:str=None):
-    frame = torch.from_numpy(cv2.imread(path)).cuda().float()
-    batch = FastBaseTransform()(frame.unsqueeze(0))
-    preds = net(batch,args)
-
-    img_numpy = prep_display(preds, frame, None, None, undo_transform=False,args=args)
-    
-    if save_path is None:
-        img_numpy = img_numpy[:, :, (2, 1, 0)]
-
-    if save_path is None:
-        plt.imshow(img_numpy)
-        plt.title(path)
-        # plt.savefig('results/results.png')
-        plt.show()
-        RGB_img = cv2.cvtColor(img_numpy, cv2.COLOR_BGR2RGB)
-        cv2.imwrite("results/results.png", RGB_img)
-    else:
-        cv2.imwrite(save_path, img_numpy)
-
-def evaluate(net:Yolact, dataset, args ,train_mode=False):
-    net.detect.use_fast_nms = args.fast_nms
-    net.detect.use_cross_class_nms = args.cross_class_nms
-    cfg.mask_proto_debug = args.mask_proto_debug
-
-    # TODO Currently we do not support Fast Mask Re-scroing in evalimage, evalimages, and evalvideo
-    if args.image is not None:
-        if ':' in args.image:
-            inp, out = args.image.split(':')
-            evalimage(net, inp, out, args)
-        else:
-            evalimage(net, args.image, args)
-        return
-    elif args.images is not None:
-        inp, out = args.images.split(':')
-        evalimages(net, inp, out)
-        return
-    elif args.video is not None:
-        if ':' in args.video:
-            inp, out = args.video.split(':')
-            evalvideo(net, inp, out)
-        else:
-            evalvideo(net, args.video)
-        return
-
-    frame_times = MovingAverage()
-    dataset_size = len(dataset) if args.max_images < 0 else min(args.max_images, len(dataset))
-    progress_bar = ProgressBar(30, dataset_size)
-
-    
-
-    if not args.display and not args.benchmark:
-        # For each class and iou, stores tuples (score, isPositive)
-        # Index ap_data[type][iouIdx][classIdx]
-        ap_data = {
-            'box' : [[APDataObject() for _ in cfg.dataset.class_names] for _ in iou_thresholds],
-            'mask': [[APDataObject() for _ in cfg.dataset.class_names] for _ in iou_thresholds]
-        }
-        detections = Detections()
-    else:
-        timer.disable('Load Data')
-
-    dataset_indices = list(range(len(dataset)))
-    
-    if args.shuffle:
-        random.shuffle(dataset_indices)
-    elif not args.no_sort:
-        # Do a deterministic shuffle based on the image ids
-        #
-        # I do this because on python 3.5 dictionary key order is *random*, while in 3.6 it's
-        # the order of insertion. That means on python 3.6, the images come in the order they are in
-        # in the annotations file. For some reason, the first images in the annotations file are
-        # the hardest. To combat this, I use a hard-coded hash function based on the image ids
-        # to shuffle the indices we use. That way, no matter what python version or how pycocotools
-        # handles the data, we get the same result every time.
-        hashed = [badhash(x) for x in dataset.ids]
-        dataset_indices.sort(key=lambda x: hashed[x])
-
-    dataset_indices = dataset_indices[:dataset_size]
-
-    try:
-        # Main eval loop
-        for it, image_idx in enumerate(dataset_indices):
-            timer.reset()
-
-            with timer.env('Load Data'):
-                img, gt, gt_masks, h, w, num_crowd = dataset.pull_item(image_idx)
-
-                # Test flag, do not upvote
-                if cfg.mask_proto_debug:
-                    with open('scripts/info.txt', 'w') as f:
-                        f.write(str(dataset.ids[image_idx]))
-                    np.save('scripts/gt.npy', gt_masks)
-
-                batch = Variable(img.unsqueeze(0))
-                if args.cuda:
-                    batch = batch.cuda()
-
-            with timer.env('Network Extra'):
-                preds = net(batch)
-            # Perform the meat of the operation here depending on our mode.
-            if args.display:
-                img_numpy = prep_display(preds, img, h, w)
-            elif args.benchmark:
-                prep_benchmark(preds, h, w)
-            else:
-                prep_metrics(ap_data, preds, img, gt, gt_masks, h, w, num_crowd, dataset.ids[image_idx], detections)
-            
-            # First couple of images take longer because we're constructing the graph.
-            # Since that's technically initialization, don't include those in the FPS calculations.
-            if it > 1:
-                frame_times.add(timer.total_time())
-            
-            if args.display:
-                if it > 1:
-                    print('Avg FPS: %.4f' % (1 / frame_times.get_avg()))
-                plt.imshow(img_numpy)
-                plt.title(str(dataset.ids[image_idx]))
-                plt.show()
-            elif not args.no_bar:
-                if it > 1: fps = 1 / frame_times.get_avg()
-                else: fps = 0
-                progress = (it+1) / dataset_size * 100
-                progress_bar.set_val(it+1)
-                print('\rProcessing Images  %s %6d / %6d (%5.2f%%)    %5.2f fps        '
-                    % (repr(progress_bar), it+1, dataset_size, progress, fps), end='')
-
-
-
-        if not args.display and not args.benchmark:
-            print()
-            if args.output_coco_json:
-                print('Dumping detections...')
-                if args.output_web_json:
-                    detections.dump_web()
-                else:
-                    detections.dump()
-            else:
-                if not train_mode:
-                    print('Saving data...')
-                    with open(args.ap_data_file, 'wb') as f:
-                        pickle.dump(ap_data, f)
-
-                return calc_map(ap_data)
-        elif args.benchmark:
-            print()
-            print()
-            print('Stats for the last frame:')
-            timer.print_stats()
-            avg_seconds = frame_times.get_avg()
-            print('Average: %5.2f fps, %5.2f ms' % (1 / frame_times.get_avg(), 1000*avg_seconds))
-
-    except KeyboardInterrupt:
-        print('Stopping...')
-
-
 if __name__ == '__main__':
     parse_args()
 
@@ -498,3 +198,11 @@ if __name__ == '__main__':
             net = net.cuda()
 
         evaluate(net, dataset, args)
+
+   
+
+    print("Evaluation completed")
+
+
+
+

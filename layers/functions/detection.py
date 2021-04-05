@@ -85,7 +85,7 @@ class Detect(object):
         cur_scores = conf_preds[batch_idx, 1:, :]
 
         # only for car class  
-        if display_only_car == True:
+        if display_only_car == 'True':
             for i in range(cur_scores.shape[0]):
                 if i != 2:
                     cur_scores[i] *= 0
