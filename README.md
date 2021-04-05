@@ -135,7 +135,8 @@ This repo will help you detect and segment the instances of the cars:
         ```
     ![Example 6](results/crop_object.png)
     
-- Task 3) YOLACT inference triggered using API endpoint by utilizing FastAPI
+- Task 3
+ - YOLACT inference triggered using API endpoint by utilizing FastAPI
   -  Currently, I dont not have enough knowledge about FastAPI client server architecture but I have made api.py file for yolact inference. In api.py I am taking arguments directly (Hard coded). Later i will add code to take input of image and arguments from the web and post the output back to the web and will deploy it using Heroku or AWS.
 
   - To run api.py just run the below code.
@@ -147,7 +148,8 @@ This repo will help you detect and segment the instances of the cars:
       uvicorn api:app --reload
     ```
 
-- Task 4) Dockerize:
+- Task 4
+ -  Dockerize:
   - Due to lack of resources I am not able to build docker image for the current setup. I am using windows 10 laptop without GPU. ALl the yolact code is edited on my university server but I do not have Sudo access for docker installation.  
   - I can assure you if I can get proper resources i can build the image and then deploy it to docker hub for later use.
   - I have made the Dockerfile which might work properly. Feel free to have a look at it. There might be some errors in it because I am not able to build it due to lack of computing power and resources.
